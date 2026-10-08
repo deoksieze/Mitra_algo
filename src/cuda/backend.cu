@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+#include "internal.cuh"
 #include "symmetry/cuda.h"
 #include "symmetry/sampling.h"
 #include <cmath>
@@ -16,42 +17,7 @@
 
 namespace symmetry {
 namespace {
-void check(cudaError_t status) {
-  if (status != cudaSuccess)
-    throw std::runtime_error(std::string("CUDA: ") +
-                             cudaGetErrorString(status));
-}
-template <class T> class Buffer {
-public:
-  T *data = nullptr;
-  explicit Buffer(std::size_t n) {
-    if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
-      throw std::overflow_error("CUDA allocation size overflow");
-    if (n)
-      check(cudaMalloc(reinterpret_cast<void **>(&data), n * sizeof(T)));
-  }
-  ~Buffer() {
-    if (data)
-      cudaFree(data);
-  }
-  Buffer(const Buffer &) = delete;
-  Buffer &operator=(const Buffer &) = delete;
-  void upload(const T *source, std::size_t n, std::size_t offset = 0) {
-    if (n)
-      check(cudaMemcpy(data + offset, source, n * sizeof(T),
-                       cudaMemcpyHostToDevice));
-  }
-  void download(T *target, std::size_t n, std::size_t offset = 0) const {
-    if (n)
-      check(cudaMemcpy(target, data + offset, n * sizeof(T),
-                       cudaMemcpyDeviceToHost));
-  }
-};
-constexpr unsigned threads = 256;
-unsigned blocks(Offset n) {
-  return static_cast<unsigned>((n + threads - 1) / threads);
-}
-
+using namespace cuda_detail;
 __global__ void prune(const Index *sample, Offset count, const double *k,
                       const std::uint8_t *valid, Offset vertices,
                       double threshold, std::uint8_t *flags) {
@@ -62,28 +28,6 @@ __global__ void prune(const Index *sample, Offset count, const double *k,
   double a = k[v], b = k[vertices + v];
   double maximum = fabs(a) < fabs(b) ? fabs(b) : fabs(a);
   flags[i] = valid[v] && maximum > 1e-10 && fabs(a - b) / maximum > threshold;
-}
-// Device PODs never contain host views or STL owners.
-struct V {
-  double x, y, z;
-};
-struct M {
-  double a[9];
-};
-__device__ V add(V a, V b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
-__device__ V sub(V a, V b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
-__device__ V scale(V a, double s) { return {a.x * s, a.y * s, a.z * s}; }
-__device__ double dotv(V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-__device__ V apply(M m, V v) {
-  return {m.a[0] * v.x + m.a[1] * v.y + m.a[2] * v.z,
-          m.a[3] * v.x + m.a[4] * v.y + m.a[5] * v.z,
-          m.a[6] * v.x + m.a[7] * v.y + m.a[8] * v.z};
-}
-__device__ V read(const double *s, Offset n, Index i, int lane) {
-  return {s[lane * n + i], s[(lane + 1) * n + i], s[(lane + 2) * n + i]};
-}
-__device__ M frame(V a, V b, V c) {
-  return {{a.x, b.x, c.x, a.y, b.y, c.y, a.z, b.z, c.z}};
 }
 struct PairGeometry {
   V p, q, an, ad, ax, bn, bd, bx, n;
@@ -178,11 +122,6 @@ __global__ void fill_votes(const double *s, Offset n, const Index *pairs,
     write_vote(out, ids, kinds, total, row++, static_cast<Index>(i), false, r,
                t, {}, 0, desc);
   }
-}
-void upload_points(Buffer<double> &device, PointsView p, Offset offset) {
-  device.upload(p.x.data, p.size(), offset);
-  device.upload(p.y.data, p.size(), offset + p.size());
-  device.upload(p.z.data, p.size(), offset + 2 * p.size());
 }
 // A conservative kmin interval indexes candidates without changing the CPU
 // predicate. Selected ordinals, not mesh IDs, define pair order.
@@ -411,7 +350,7 @@ public:
   }
   ClusterOutput clustering(VotesView v, ModelContext c, const Options &o,
                            std::mt19937_64 &rng) const override {
-    return cpu->clustering(v, c, o, rng);
+    return cuda_detail::clustering(v, c, o, rng);
   }
   Verification verification(MeshView m, TopologyView t, ClustersView c,
                             ModelContext ctx, const Options &o) const override {

@@ -9,6 +9,15 @@ Pairs pairing(MeshView, FeaturesView, ArrayView<const Index>, ModelContext,
               const Options &);
 Votes transformations(MeshView, FeaturesView, PairsView, ModelContext,
                       const Options &);
+struct Neighborhood {
+  Descriptor weighted_sum;
+  double weight = 0;
+  std::vector<Index> members;
+};
+using NeighborhoodEvaluator =
+    std::function<Neighborhood(const Descriptor &, bool, double)>;
+ClusterOutput clustering_with(VotesView, ModelContext, const Options &,
+                              std::mt19937_64 &, const NeighborhoodEvaluator &);
 ClusterOutput clustering(VotesView, ModelContext, const Options &,
                          std::mt19937_64 &);
 Verification verification(MeshView, TopologyView, ClustersView, ModelContext,

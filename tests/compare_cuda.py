@@ -16,7 +16,7 @@ maximum=0.0
 
 def compare(a,b,path=''):
     global maximum
-    if isinstance(a,float):
+    if isinstance(a,float) or isinstance(b,float):
         error=abs(a-b)/(1+abs(a));maximum=max(maximum,error)
         assert math.isfinite(b) and error<2e-10,(path,a,b,error)
     elif isinstance(a,list):

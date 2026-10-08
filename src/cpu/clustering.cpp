@@ -29,8 +29,9 @@ double descriptor_distance(const Descriptor &a, const Descriptor &b) {
   }
   return s;
 }
-ClusterOutput clustering(VotesView votes, ModelContext context,
-                         const Options &options, std::mt19937_64 &random) {
+ClusterOutput clustering_with(VotesView votes, ModelContext context,
+                              const Options &options, std::mt19937_64 &random,
+                              const NeighborhoodEvaluator &evaluate) {
   std::vector<UnpackedCluster> clusters;
   int limited_iterations = 0;
   double h = options.bandwidth, h2 = h * h;
@@ -52,21 +53,12 @@ ClusterOutput clustering(VotesView votes, ModelContext context,
     std::map<int, std::uint64_t> support;
     bool converged = false;
     for (int iteration = 0; iteration < options.max_iterations; ++iteration) {
-      Descriptor next = Descriptor::zero(mean.size());
-      double weight = 0;
-      for (std::size_t j = 0; j < votes.size(); ++j) {
-        if (votes.is_reflection(j) != reflection)
-          continue;
-        auto descriptor = votes.descriptor_at(j);
-        double distance = descriptor_distance(mean, descriptor);
-        if (distance < h2) {
-          double w = 1 - distance / h2;
-          weight += w;
-          ++support[j];
-          visited[j] = true;
-          for (std::size_t k = 0; k < mean.size(); ++k)
-            next[k] += w * descriptor[k];
-        }
+      auto neighborhood = evaluate(mean, reflection, h2);
+      Descriptor next = neighborhood.weighted_sum;
+      double weight = neighborhood.weight;
+      for (Index j : neighborhood.members) {
+        ++support[j];
+        visited[j] = true;
       }
       if (weight <= eps) {
         visited[seed] = true;
@@ -173,6 +165,30 @@ ClusterOutput clustering(VotesView votes, ModelContext context,
     result.clusters.append(static_cast<const ClusterRecord &>(c), c.votes);
   result.clusters.verification = Verification::empty(result.clusters.size());
   return result;
+}
+
+ClusterOutput clustering(VotesView votes, ModelContext context,
+                         const Options &options, std::mt19937_64 &random) {
+  return clustering_with(
+      votes, context, options, random,
+      [&](const Descriptor &mean, bool reflection, double h2) {
+        Neighborhood result;
+        result.weighted_sum = Descriptor::zero(mean.size());
+        for (Offset j = 0; j < votes.size(); ++j) {
+          if (votes.is_reflection(j) != reflection)
+            continue;
+          auto descriptor = votes.descriptor_at(j);
+          double distance = descriptor_distance(mean, descriptor);
+          if (distance < h2) {
+            double w = 1 - distance / h2;
+            result.weight += w;
+            result.members.push_back(j);
+            for (Offset k = 0; k < mean.size(); ++k)
+              result.weighted_sum[k] += w * descriptor[k];
+          }
+        }
+        return result;
+      });
 }
 
 } // namespace symmetry::cpu
