@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 project(SymmetryDetection LANGUAGES CXX)
 
 # Historical MATLAB/libigl sources remain excluded from these explicit targets.
-add_library(symmetry_core src/core/math.cpp src/core/prepare.cpp src/core/pipeline.cpp)
+add_library(symmetry_core src/core/sampling.cpp src/core/math.cpp src/core/prepare.cpp src/core/pipeline.cpp)
 target_include_directories(symmetry_core PUBLIC include)
 target_compile_features(symmetry_core PUBLIC cxx_std_17)
 add_library(symmetry_cpu
@@ -36,5 +36,32 @@ if(BUILD_TESTING)
   if(Python3_Interpreter_FOUND)
     add_test(NAME pipeline COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/pipeline.py
       $<TARGET_FILE:symmetry_cpu_cli> ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
+endif()
+
+option(SYMMETRY_ENABLE_CUDA "Build the hybrid CUDA backend" OFF)
+if(SYMMETRY_ENABLE_CUDA)
+  enable_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+  find_path(SYMMETRY_CCCL_INCLUDE cub/device/device_scan.cuh
+    HINTS ${CUDAToolkit_INCLUDE_DIRS} PATH_SUFFIXES cccl REQUIRED)
+  add_library(symmetry_cuda src/cuda/backend.cu)
+  target_include_directories(symmetry_cuda PRIVATE ${SYMMETRY_CCCL_INCLUDE})
+  target_link_libraries(symmetry_cuda PUBLIC Symmetry::cpu CUDA::cudart)
+  set_target_properties(symmetry_cuda PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
+  target_compile_options(symmetry_cuda PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false>)
+  add_library(Symmetry::cuda ALIAS symmetry_cuda)
+  target_link_libraries(symmetry_cpu_cli PRIVATE Symmetry::cuda)
+  target_compile_definitions(symmetry_cpu_cli PRIVATE SYMMETRY_HAS_CUDA)
+  if(BUILD_TESTING)
+    add_executable(symmetry_cuda_test tests/cuda_backend.cpp)
+    target_link_libraries(symmetry_cuda_test PRIVATE Symmetry::cuda)
+    add_test(NAME cuda_backend COMMAND symmetry_cuda_test)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME compare_cuda COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/compare_cuda.py
+        $<TARGET_FILE:symmetry_cpu_cli>)
+      add_test(NAME pipeline_cuda COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/pipeline.py
+        $<TARGET_FILE:symmetry_cpu_cli> ${CMAKE_CURRENT_SOURCE_DIR} cuda)
+    endif()
   endif()
 endif()

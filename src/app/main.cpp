@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "symmetry/io.h"
+#ifdef SYMMETRY_HAS_CUDA
+#include "symmetry/cuda.h"
+#endif
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -7,8 +10,9 @@
 #include <string>
 static void help() {
   std::cout
-      << R"(CPU partial symmetry detector (rigid motion + plane reflection, scale=1)
+      << R"(Partial symmetry detector (rigid motion + plane reflection, scale=1)
 Usage: symmetry_cpu_cli MODEL.off|MODEL.obj --output DIRECTORY [options]
+  --backend cpu|cuda    default cpu; CUDA requires SYMMETRY_ENABLE_CUDA=ON
   --sample-ratio X      (0,1], default 0.5, area-weighted vertex sampling
   --prune X             (0,1), default 0.85, larger retains more vertices
   --pair-threshold X    (0,1], default 0.15, curvature tolerance
@@ -35,6 +39,7 @@ int main(int argc, char **argv) {
       return 2;
     }
     symmetry::Options o;
+    std::string backend_name = "cpu";
     std::filesystem::path input, out;
     for (int i = 1; i < argc; ++i) {
       std::string a = argv[i];
@@ -79,6 +84,8 @@ int main(int argc, char **argv) {
       };
       if (a == "--output")
         out = value;
+      else if (a == "--backend")
+        backend_name = value;
       else if (a == "--sample-ratio")
         o.sample_ratio = number();
       else if (a == "--prune")
@@ -112,7 +119,19 @@ int main(int argc, char **argv) {
                                          !std::filesystem::is_empty(out)))
       throw std::runtime_error("Output directory must be new or empty "
                                "(existing results are preserved)");
-    auto backend = symmetry::make_cpu_backend();
+    std::unique_ptr<symmetry::Backend> backend;
+    if (backend_name == "cpu")
+      backend = symmetry::make_cpu_backend();
+    else if (backend_name == "cuda") {
+#ifdef SYMMETRY_HAS_CUDA
+      backend = symmetry::make_cuda_backend();
+#else
+      throw std::runtime_error(
+          "CUDA backend unavailable: rebuild with -DSYMMETRY_ENABLE_CUDA=ON");
+#endif
+    } else
+      throw std::runtime_error("Unknown backend: " + backend_name);
+    std::cout << "backend=" << backend->name() << '\n';
     auto r = symmetry::detect(symmetry::read_mesh(input), o, *backend,
                               [](const std::string &stage, double ms) {
                                 std::cout << stage << ": " << ms << " ms\n";

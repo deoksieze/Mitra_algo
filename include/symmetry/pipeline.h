@@ -49,10 +49,8 @@ struct ClusterOutput {
   Clusters clusters;
   int limited_iterations = 0;
 };
-// All views passed here refer to HOST memory. A future CUDA backend owns its
-// device allocations/transfers and returns host-owned stage results. RNG
-// remains on the host and preserves the stage order; no GPU backend is claimed
-// here.
+// All views passed here refer to HOST memory. CUDA owns its device allocations
+// and transfers and returns completed host-owned results. RNG stays on host.
 class Backend {
 public:
   virtual ~Backend() = default;

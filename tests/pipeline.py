@@ -16,7 +16,7 @@ spec.loader.exec_module(generator)
 
 
 def run(args, success=True):
-    process = subprocess.run([str(binary),*map(str,args)], capture_output=True, text=True, timeout=45)
+    process = subprocess.run([str(binary),*( ["--backend",sys.argv[3]] if len(sys.argv)>3 else [] ),*map(str,args)], capture_output=True, text=True, timeout=45)
     if (process.returncode == 0) != success:
         raise AssertionError(process.stdout+process.stderr)
     return process
@@ -141,6 +141,7 @@ with tempfile.TemporaryDirectory(prefix='symmetry-regression-') as directory:
     assert 'winding' in run([bad,'--output',tmp/'winding'],False).stderr
     for option,value in [('--sample-ratio','0'),('--bandwidth','nan'),('--smoothing','-1'),('--prune','1'),('--seed','-1'),('--max-clusters','1.5')]:
         run([model,'--output',tmp/'invalid',option,value],False)
+    assert 'Unknown backend' in run([model,'--output',tmp/'unknown_backend','--backend','bogus'],False).stderr
     assert 'budget' in run([model,'--output',tmp/'budget','--sample-ratio','1','--max-pairs','1'],False).stderr
     assert 'budget' in run([model,'--output',tmp/'vote_budget','--sample-ratio','1','--max-votes','1'],False).stderr
     # The renderer must be standalone and contain actual finite results.
