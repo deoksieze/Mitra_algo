@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SymmetryDetection · CPU</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#111923;color:#edf3fa;font:15px system-ui,sans-serif}main{display:grid;grid-template-columns:310px 1fr;height:100vh}aside{padding:24px;overflow:auto;border-right:1px solid #334052}h1{font-size:21px;margin:0 0 6px}p{color:#a9bbcf;line-height:1.5}label{display:block;margin:18px 0 8px}select,button,input[type=file]{width:100%;background:#203044;color:white;border:1px solid #53677f;padding:9px;border-radius:6px}button{cursor:pointer;margin-top:16px}input[type=range]{width:100%}.legend{display:flex;gap:16px;margin:18px 0}.a{color:#70dfbc}.b{color:#f6a76e}#stats{white-space:pre-wrap;font:13px ui-monospace,monospace;line-height:1.7}canvas{width:100%;height:100%;display:block;touch-action:none}section{position:relative;min-width:0;min-height:0}.hint{position:absolute;bottom:18px;left:20px;pointer-events:none;color:#c6d2df}input[type=checkbox]{accent-color:#70dfbc}#empty{padding:15px;color:#ffd68c}@media(max-width:650px){main{grid-template-columns:1fr;grid-template-rows:260px 1fr}aside{padding:12px;border-bottom:1px solid #334052}label{margin:8px 0}h1{font-size:17px}.hint{font-size:12px}}
+</style></head><body><main><aside>
+<h1>Частичные симметрии</h1><p>CPU · жёсткие преобразования и отражения</p>
+<label>Открыть другой result.json<input id="file" type="file" accept=".json"></label>
+<label>Гипотеза<select id="cluster"></select></label>
+<div class="legend"><span class="a">● Сторона A</span><span class="b">● Сторона B</span></div>
+<label>Отображение<select id="display"><option value="patches">Проверенные участки</option><option value="sample">Выбранные точки</option><option value="pruned">После фильтрации</option><option value="pairs">Пары текущего кластера</option></select></label>
+<label><input id="faces" type="checkbox" checked> Поверхность</label>
+<label><input id="transformed" type="checkbox"> Показать T(сторона A) голубым</label>
+<label>Размер точек<input id="size" type="range" min="1" max="8" value="3"></label>
+<button id="reset">Сбросить ракурс</button><p id="empty"></p><div id="stats"></div>
+<p>Coverage — доля площади около совпадающих вершин. RMS — ошибка стороны A. Это проверка гипотезы, а не доказательство симметрии всей модели.</p>
+</aside><section><canvas id="canvas"></canvas><div class="hint">Перетаскивание: вращение · колесо: масштаб · Shift + перетаскивание: сдвиг</div></section></main>
+<script>
+'use strict';
+let data=/*RESULT_DATA*/null;
+const $=id=>document.getElementById(id),canvas=$('canvas'),ctx=canvas.getContext('2d');
+let yaw=.45,pitch=-.25,zoom=1,pan=[0,0],center=[0,0,0],extent=1;
+function load(value){if(!value||value.schema_version!==1||!Array.isArray(value.vertices))throw Error('Ожидается result.json версии 1');data=value;
+let lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];for(const p of data.vertices)for(let k=0;k<3;k++){lo[k]=Math.min(lo[k],p[k]);hi[k]=Math.max(hi[k],p[k]);}center=lo.map((x,k)=>(x+hi[k])/2);extent=Math.max(...hi.map((x,k)=>x-lo[k]))||1;
+$('cluster').replaceChildren();data.clusters.forEach((c,i)=>{let op=document.createElement('option');op.value=i;op.textContent=`${i}: ${c.type==='reflection'?'отражение':'поворот / сдвиг'} · ${c.votes.length} голосов`;$('cluster').append(op);});
+$('empty').textContent=data.clusters.length?'':'Кластеров нет. Посмотрите выборку и фильтрацию; попробуйте менее строгие параметры.';reset();}
+function reset(){yaw=.45;pitch=-.25;zoom=1;pan=[0,0];draw();}
+function project(p){let [x,y,z]=p.map((v,k)=>v-center[k]);let a=Math.cos(yaw)*x+Math.sin(yaw)*z,b=-Math.sin(yaw)*x+Math.cos(yaw)*z;let y2=Math.cos(pitch)*y-Math.sin(pitch)*b,z2=Math.sin(pitch)*y+Math.cos(pitch)*b;let scale=.7*Math.min(canvas.clientWidth,canvas.clientHeight)/extent*zoom;return [canvas.clientWidth/2+pan[0]+a*scale,canvas.clientHeight/2+pan[1]-y2*scale,z2];}
+function draw(){let dpr=window.devicePixelRatio||1;canvas.width=Math.round(canvas.clientWidth*dpr);canvas.height=Math.round(canvas.clientHeight*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#111923';ctx.fillRect(0,0,canvas.clientWidth,canvas.clientHeight);if(!data)return;
+let c=data.clusters[Number($('cluster').value)],mode=$('display').value,A=new Set(c?.side_a||[]),B=new Set(c?.side_b||[]),sample=new Set(data[mode]||[]),points=data.vertices.map(project);
+if($('faces').checked){let faces=data.faces.map(f=>({f,z:f.reduce((s,i)=>s+points[i][2],0)/3})).sort((a,b)=>a.z-b.z);for(const {f} of faces){ctx.beginPath();f.forEach((i,k)=>{let p=points[i];if(k)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1]);});ctx.closePath();let color='#2a394b';if(mode==='patches'&&f.every(i=>A.has(i)))color='#28594e';else if(mode==='patches'&&f.every(i=>B.has(i)))color='#654836';ctx.fillStyle=color;ctx.fill();ctx.strokeStyle='#435267';ctx.lineWidth=.4;ctx.stroke();}}
+const dot=(p,color,size)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(p[0],p[1],size,0,2*Math.PI);ctx.fill();};let size=Number($('size').value);
+if(mode==='pairs'&&c){ctx.strokeStyle='rgba(125,189,246,.45)';for(const id of [...new Set(c.pair_ids)].slice(0,2000)){const pair=data.pairs[id];if(!pair)continue;let a=points[pair[0]],b=points[pair[1]];ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();dot(a,'#70dfbc',size);dot(b,'#f6a76e',size);}}
+else for(let i=0;i<points.length;i++){if(mode==='sample'||mode==='pruned'){if(sample.has(i))dot(points[i],'#81bfff',size);}else if(A.has(i)||B.has(i))dot(points[i],A.has(i)?'#70dfbc':'#f6a76e',size);}
+if(c&&$('transformed').checked)for(const i of c.side_a){let p=data.vertices[i],r=c.rotation,t=c.translation,q=[0,1,2].map(k=>r[k*3]*p[0]+r[k*3+1]*p[1]+r[k*3+2]*p[2]+t[k]);dot(project(q),'#79d9ff',size*.8);}
+let stats=`Вершины: ${data.counts.vertices}\nГрани: ${data.counts.faces}\nВыборка: ${data.sample.length}\nПосле фильтра: ${data.pruned.length}\nПары: ${data.counts.pairs}\nГолоса: ${data.counts.votes}\nSeed: ${data.parameters.seed}`;
+if(c){stats+=`\n\nУчастки A / B: ${c.patches_a.length} / ${c.patches_b.length}\nВершины A / B: ${c.side_a.length} / ${c.side_b.length}\nCoverage: ${(c.coverage*100).toFixed(1)}%\nRMS: ${c.rms.toPrecision(4)}`;if(c.type==='reflection')stats+=`\nПлоскость n·p+d=0\nn: ${c.plane_normal.map(x=>x.toFixed(4)).join(', ')}\nd: ${c.plane_offset.toFixed(4)}`;}
+$('stats').textContent=stats;}
+let drag=null;canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId);});canvas.addEventListener('pointermove',e=>{if(!drag)return;let dx=e.clientX-drag[0],dy=e.clientY-drag[1];if(e.shiftKey){pan[0]+=dx;pan[1]+=dy;}else{yaw+=dx*.008;pitch+=dy*.008;}drag=[e.clientX,e.clientY];draw();});canvas.addEventListener('pointerup',()=>drag=null);canvas.addEventListener('pointercancel',()=>drag=null);canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.1,Math.min(20,zoom*Math.exp(-e.deltaY*.001)));draw();},{passive:false});
+for(const id of ['cluster','display','faces','transformed','size'])$(id).addEventListener('input',draw);$('reset').onclick=reset;window.addEventListener('resize',draw);$('file').onchange=async e=>{try{let file=e.target.files[0];if(file)load(JSON.parse(await file.text()));}catch(error){$('empty').textContent=error.message;}};if(data)load(data);else $('empty').textContent='Откройте result.json для просмотра.';
+</script></body></html>
