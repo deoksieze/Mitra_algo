@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 project(SymmetryDetection LANGUAGES CXX)
 
-# Historical MATLAB/libigl sources remain excluded from these explicit targets.
+# Current standalone CPU/CUDA targets use explicit source lists.
 add_library(symmetry_core src/core/sampling.cpp src/core/math.cpp src/core/prepare.cpp src/core/pipeline.cpp)
 target_include_directories(symmetry_core PUBLIC include)
 target_compile_features(symmetry_core PUBLIC cxx_std_17)

@@ -83,3 +83,10 @@ build/
 build-*/
 outputs/
 __pycache__/
+
+# Generated in-source CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
