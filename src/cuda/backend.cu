@@ -2,10 +2,15 @@
 #include "symmetry/cuda.h"
 #include "symmetry/sampling.h"
 #include <cmath>
+#include <cub/block/block_reduce.cuh>
+#include <cub/block/block_scan.cuh>
+#include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
+#include <cub/device/device_segmented_radix_sort.cuh>
 #include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
 #include <limits>
+#include <math_constants.h>
 #include <stdexcept>
 #include <string>
 
@@ -179,6 +184,211 @@ void upload_points(Buffer<double> &device, PointsView p, Offset offset) {
   device.upload(p.y.data, p.size(), offset + p.size());
   device.upload(p.z.data, p.size(), offset + 2 * p.size());
 }
+// A conservative kmin interval indexes candidates without changing the CPU
+// predicate. Selected ordinals, not mesh IDs, define pair order.
+__global__ void initialize_ordinals(Index *ordinals, Offset count) {
+  Offset i = static_cast<Offset>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < count)
+    ordinals[i] = static_cast<Index>(i);
+}
+__device__ Offset lower_key(const double *keys, Offset count, double key,
+                            bool upper) {
+  Offset first = 0;
+  while (count) {
+    Offset half = count / 2, mid = first + half;
+    if (keys[mid] < key || (upper && keys[mid] == key)) {
+      first = mid + 1;
+      count -= half + 1;
+    } else
+      count = half;
+  }
+  return first;
+}
+__global__ void candidate_ranges(const double *source, const double *keys,
+                                 Offset count, double threshold,
+                                 Offset *ranges) {
+  Offset i = static_cast<Offset>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= count)
+    return;
+  Offset lo = 0, hi = count;
+  // The CPU predicate rounds both differences and tolerance products.
+  // Inflate t before deriving a necessary interval; inflating just the final
+  // radius is insufficient when 1-t is tiny. Near t=1 use the full range.
+  double safe_threshold = threshold + 8 * 2.2204460492503131e-16;
+  if (safe_threshold < 1) {
+    double a = source[3 * count + i], b = source[4 * count + i];
+    double magnitude = fmax(fmax(fabs(a), fabs(b)), 1e-10);
+    // If a pair passes, Mj <= Mi/(1-t), hence |ki-kj| <= t*Mi/(1-t).
+    // Round the search interval outwards; the exact predicate still decides.
+    double maximum = magnitude / (1 - safe_threshold),
+           radius = safe_threshold * maximum;
+    double padding = 64 * 2.2204460492503131e-16 * (fabs(a) + maximum + radius);
+    double low = nextafter(a - radius - padding, -CUDART_INF);
+    double high = nextafter(a + radius + padding, CUDART_INF);
+    lo = lower_key(keys, count, low, false);
+    hi = lower_key(keys, count, high, true);
+  }
+  ranges[i] = lo;
+  ranges[count + i] = hi;
+}
+__device__ bool accepts_pair(const double *source, Offset count, Index a,
+                             Index b, double threshold, double distance) {
+  if (b <= a)
+    return false;
+  double amin = source[3 * count + a], amax = source[4 * count + a];
+  double bmin = source[3 * count + b], bmax = source[4 * count + b];
+  double magnitude = fmax(
+      fmax(fmax(fmax(fabs(amin), fabs(amax)), fabs(bmin)), fabs(bmax)), 1e-10);
+  double tolerance = threshold * magnitude;
+  if (fabs(amin - bmin) > tolerance || fabs(amax - bmax) > tolerance)
+    return false;
+  V difference = sub(read(source, count, a, 0), read(source, count, b, 0));
+  return !(sqrt(dotv(difference, difference)) < distance);
+}
+__global__ void count_pairs(const double *source, const Index *sorted,
+                            Offset count, const Offset *ranges,
+                            double threshold, double distance, Offset *counts) {
+  Index a = static_cast<Index>(blockIdx.x);
+  Offset sum = 0;
+  for (Offset k = ranges[a] + threadIdx.x; k < ranges[count + a];
+       k += blockDim.x)
+    sum += accepts_pair(source, count, a, sorted[k], threshold, distance);
+  __shared__ cub::BlockReduce<Offset, threads>::TempStorage temporary;
+  Offset total = cub::BlockReduce<Offset, threads>(temporary).Sum(sum);
+  if (threadIdx.x == 0) {
+    counts[a] = total;
+    if (a == 0)
+      counts[count] = 0;
+  }
+}
+__global__ void fill_pairs(const double *source, const Index *sorted,
+                           Offset count, const Offset *ranges,
+                           const Offset *offsets, double threshold,
+                           double distance, Index *accepted) {
+  Index a = static_cast<Index>(blockIdx.x);
+  Offset cursor = offsets[a];
+  __shared__ cub::BlockScan<Offset, threads>::TempStorage temporary;
+  // Candidate packets are exactly one block (256); no candidate matrix exists.
+  for (Offset first = ranges[a]; first < ranges[count + a];
+       first += blockDim.x) {
+    Offset k = first + threadIdx.x;
+    Index b = k < ranges[count + a] ? sorted[k] : -1;
+    Offset flag = k < ranges[count + a] &&
+                  accepts_pair(source, count, a, b, threshold, distance);
+    Offset position = 0, total = 0;
+    cub::BlockScan<Offset, threads>(temporary).ExclusiveSum(flag, position,
+                                                            total);
+    if (flag)
+      accepted[cursor + position] = b;
+    cursor += total;
+    __syncthreads();
+  }
+}
+__global__ void materialize_pairs(const Index *selected, const Index *accepted,
+                                  const Offset *offsets, Offset total,
+                                  Index *output) {
+  Index a = static_cast<Index>(blockIdx.x);
+  for (Offset i = offsets[a] + threadIdx.x; i < offsets[a + 1];
+       i += blockDim.x) {
+    output[i] = selected[a];
+    output[total + i] = selected[accepted[i]];
+  }
+}
+Pairs cuda_pairing(MeshView mesh, FeaturesView features,
+                   ArrayView<const Index> selected, ModelContext context,
+                   const Options &options) {
+  Pairs result;
+  Offset count = selected.size();
+  if (count < 2)
+    return result;
+  require_size(features.size(), mesh.vertices.size());
+  if (count > static_cast<Offset>(std::numeric_limits<Index>::max()))
+    throw std::overflow_error("CUDA selected ordinals exceed int32 range");
+  if (!(context.box_size > 0) || !std::isfinite(context.box_size) ||
+      !(options.pair_threshold > 0 && options.pair_threshold <= 1))
+    throw std::invalid_argument("CUDA pairing requires positive finite box "
+                                "size and threshold in (0,1]");
+  std::vector<double> packed(5 * count);
+  for (Offset a = 0; a < count; ++a) {
+    Index i = selected[a];
+    if (i < 0 || static_cast<Offset>(i) >= mesh.vertices.size())
+      throw std::invalid_argument("CUDA selected vertex index out of range");
+    Vec p = mesh.vertices[i];
+    double values[5] = {p.x, p.y, p.z, features.kmin[i], features.kmax[i]};
+    for (int k = 0; k < 5; ++k) {
+      if (!std::isfinite(values[k]))
+        throw std::invalid_argument(
+            "CUDA pairing requires finite coordinates and curvatures");
+      packed[k * count + a] = values[k];
+    }
+  }
+  Buffer<double> source(5 * count), keys(count);
+  source.upload(packed.data(), packed.size());
+  Buffer<Index> ordinals(count), sorted(count), ids(count);
+  ids.upload(selected.data, count);
+  initialize_ordinals<<<blocks(count), threads>>>(ordinals.data, count);
+  check(cudaGetLastError());
+  std::size_t bytes = 0;
+  check(cub::DeviceRadixSort::SortPairs(nullptr, bytes, source.data + 3 * count,
+                                        keys.data, ordinals.data, sorted.data,
+                                        count));
+  {
+    Buffer<std::uint8_t> temporary(bytes);
+    check(cub::DeviceRadixSort::SortPairs(temporary.data, bytes,
+                                          source.data + 3 * count, keys.data,
+                                          ordinals.data, sorted.data, count));
+  }
+  Buffer<Offset> ranges(2 * count), counts(count + 1), offsets(count + 1);
+  candidate_ranges<<<blocks(count), threads>>>(
+      source.data, keys.data, count, options.pair_threshold, ranges.data);
+  check(cudaGetLastError());
+  count_pairs<<<static_cast<unsigned>(count), threads>>>(
+      source.data, sorted.data, count, ranges.data, options.pair_threshold,
+      .03 * context.box_size, counts.data);
+  check(cudaGetLastError());
+  bytes = 0;
+  check(cub::DeviceScan::ExclusiveSum(nullptr, bytes, counts.data, offsets.data,
+                                      count + 1));
+  {
+    Buffer<std::uint8_t> temporary(bytes);
+    check(cub::DeviceScan::ExclusiveSum(temporary.data, bytes, counts.data,
+                                        offsets.data, count + 1));
+  }
+  Offset total = 0;
+  offsets.download(&total, 1, count);
+  if (total > options.max_pairs ||
+      total > static_cast<Offset>(std::numeric_limits<Index>::max()))
+    throw std::runtime_error("Pair budget exceeded; lower --sample-ratio or "
+                             "tighten --pair-threshold");
+  if (!total)
+    return result;
+  Buffer<Index> accepted(total), ordered(total), output(2 * total);
+  fill_pairs<<<static_cast<unsigned>(count), threads>>>(
+      source.data, sorted.data, count, ranges.data, offsets.data,
+      options.pair_threshold, .03 * context.box_size, accepted.data);
+  check(cudaGetLastError());
+  // Sorting each source's accepted target ordinals restores the CPU nested-loop
+  // order even if kmin keys tie or selected IDs are not sorted.
+  bytes = 0;
+  check(cub::DeviceSegmentedRadixSort::SortKeys(
+      nullptr, bytes, accepted.data, ordered.data, total, count, offsets.data,
+      offsets.data + 1));
+  {
+    Buffer<std::uint8_t> temporary(bytes);
+    check(cub::DeviceSegmentedRadixSort::SortKeys(
+        temporary.data, bytes, accepted.data, ordered.data, total, count,
+        offsets.data, offsets.data + 1));
+  }
+  materialize_pairs<<<static_cast<unsigned>(count), threads>>>(
+      ids.data, ordered.data, offsets.data, total, output.data);
+  check(cudaGetLastError());
+  result.a.resize(total);
+  result.b.resize(total);
+  output.download(result.a.data(), total);
+  output.download(result.b.data(), total, total);
+  return result;
+}
+
 class CudaBackend final : public Backend {
   std::unique_ptr<Backend> cpu = make_cpu_backend();
 
@@ -197,7 +407,7 @@ public:
   }
   Pairs pairing(MeshView m, FeaturesView f, ArrayView<const Index> p,
                 ModelContext c, const Options &o) const override {
-    return cpu->pairing(m, f, p, c, o);
+    return cuda_pairing(m, f, p, c, o);
   }
   ClusterOutput clustering(VotesView v, ModelContext c, const Options &o,
                            std::mt19937_64 &rng) const override {
