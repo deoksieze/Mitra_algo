@@ -342,7 +342,7 @@ public:
   const char *name() const noexcept override { return "cuda"; }
   Features curvature(MeshView m, TopologyView t,
                      const Options &o) const override {
-    return cpu->curvature(m, t, o);
+    return cuda_detail::curvature(m, t, o);
   }
   Pairs pairing(MeshView m, FeaturesView f, ArrayView<const Index> p,
                 ModelContext c, const Options &o) const override {

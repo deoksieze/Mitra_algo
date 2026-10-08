@@ -83,6 +83,7 @@ inline void upload_points(Buffer<double> &device, PointsView p, Offset offset) {
   device.upload(p.y.data, p.size(), offset + p.size());
   device.upload(p.z.data, p.size(), offset + 2 * p.size());
 }
+Features curvature(MeshView, TopologyView, const Options &);
 Verification verification(MeshView, TopologyView, ClustersView, ModelContext,
                           const Options &);
 ClusterOutput clustering(VotesView, ModelContext, const Options &,

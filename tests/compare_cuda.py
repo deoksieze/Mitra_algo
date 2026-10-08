@@ -41,15 +41,23 @@ with tempfile.TemporaryDirectory(prefix='symmetry-cpu-cuda-') as directory:
                     check=True,capture_output=True,text=True,timeout=60)
                 outputs.append(out)
             a,b=outputs
-            for filename in ['features.csv','pairs.csv','mesh.off']:
+            for filename in ['pairs.csv','mesh.off']:
                 assert (a/filename).read_bytes()==(b/filename).read_bytes(),filename
-            for filename in ['votes.csv','descriptors.csv']:
+            for filename in ['features.csv','votes.csv','descriptors.csv']:
                 rows=[]
                 for out in outputs:
                     with (out/filename).open() as f:rows.append(list(csv.reader(f)))
                 assert rows[0][0]==rows[1][0] and len(rows[0])==len(rows[1]),filename
                 for i,(x,y) in enumerate(zip(rows[0][1:],rows[1][1:])):
                     assert len(x)==len(y)
+                    if filename=='features.csv':
+                        assert x[0]==y[0] and x[15:]==y[15:], 'feature IDs/flags differ'
+                        if x[15]=='1' and sum(float(x[k])*float(y[k]) for k in range(9,12))<0:
+                            y=y.copy()
+                            for k in range(9,15):y[k]=str(-float(y[k]))
+                        if x[15]=='0':
+                            y=y.copy();y[9:15]=x[9:15] # Invalid directions are unused.
+
                     for j,(v,w) in enumerate(zip(x,y)):
                         try:compare(float(v),float(w),f'{filename}[{i},{j}]')
                         except ValueError:assert v==w
