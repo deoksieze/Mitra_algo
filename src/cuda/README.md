@@ -1,20 +1,31 @@
-# Hybrid CUDA backend (stages 3–4)
+# CUDA backend (stages 3–8)
 
-`backend.cu` implements GPU feature pruning, indexed GPU pairing and GPU
-transformation votes. Curvature, sampling, clustering and verification run on CPU.
+The optional backend implements feature pruning, indexed pairing, transformation
+votes, mean shift, surface verification, and normals/tensors/tangent eigenframes.
+Host code prepares topology/BVH, subdivision, sampling/RNG, seed/merge order,
+and completed results. MATLAB and libigl are not required.
 
-Pairing sorts kmin keys, searches conservative candidate ranges, checks the CPU
-predicate in bounded packets, and uses count → exclusive scan → fill. Segmented
-sorting of accepted target ordinals restores CPU pair order. Storage is O(S+P)
-plus CUB scratch, without an S² candidate matrix. Dense ranges can still require
-quadratic computation; the output budget is checked before pair allocation.
+Pairing sorts kmin keys, searches conservative ranges, checks candidates in
+bounded packets, and uses count → scan → fill. Segmented sorting restores CPU
+pair order. Storage is O(S+P) plus CUB scratch; dense ranges can still require
+quadratic computation. Output budgets are checked before allocation.
 
-All Backend inputs are borrowed host views. Device buffers belong to each method;
-completed host-owned outputs preserve CPU ordering and the export format.
+Mean shift evaluates a trajectory in batches of up to eight iterations using one
+cooperative block. Component sums retain CPU vote order; support is compacted
+once per trajectory. This preserves deterministic seed/merge semantics but
+limits parallelism. A CUDA implementation does not imply a speedup.
 
-Enable with `-DSYMMETRY_ENABLE_CUDA=ON`, set `CMAKE_CUDA_ARCHITECTURES` for your GPU,
-and run the CLI with `--backend cuda`. CPU-only builds keep CUDA optional.
+Verification uses device BVH queries and iterative CSR component labels.
+Curvature uses ordered CSR gathers and a tangent-plane 2×2 eigenproblem.
+All inputs are borrowed host views; method-owned device buffers return completed
+host-owned outputs in CPU order. Precision is double with FMA disabled.
 
-See [CUDA_STAGE3_RU.md](../../CUDA_STAGE3_RU.md) and
-[CUDA_STAGE4_RU.md](../../CUDA_STAGE4_RU.md) for build/run commands, tests,
-measurements and the Compute Sanitizer environment limitation.
+Enable `SYMMETRY_ENABLE_CUDA=ON`, choose `CMAKE_CUDA_ARCHITECTURES` for your GPU,
+and run `symmetry_cpu_cli --backend cuda`. The executable name is historical;
+CPU-only builds remain supported, and CPU is the default backend.
+
+`make_cuda_backend(true)` enables optional per-stage CUDA event, explicit copy,
+custom launch and buffer accounting. Profiling introduces synchronization;
+ordinary benchmarks disable it. See [CUDA_STAGE8_RU.md](../../CUDA_STAGE8_RU.md)
+for measurement definitions, results and environment limitations, and
+[RUNNING_RU.md](../../RUNNING_RU.md) for build/run commands.

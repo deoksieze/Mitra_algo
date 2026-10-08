@@ -265,8 +265,10 @@ Pairs cuda_pairing(MeshView mesh, FeaturesView features,
   source.upload(packed.data(), packed.size());
   Buffer<Index> ordinals(count), sorted(count), ids(count);
   ids.upload(selected.data, count);
+  begin_kernel();
   initialize_ordinals<<<blocks(count), threads>>>(ordinals.data, count);
   check(cudaGetLastError());
+  end_kernel();
   std::size_t bytes = 0;
   check(cub::DeviceRadixSort::SortPairs(nullptr, bytes, source.data + 3 * count,
                                         keys.data, ordinals.data, sorted.data,
@@ -278,13 +280,17 @@ Pairs cuda_pairing(MeshView mesh, FeaturesView features,
                                           ordinals.data, sorted.data, count));
   }
   Buffer<Offset> ranges(2 * count), counts(count + 1), offsets(count + 1);
+  begin_kernel();
   candidate_ranges<<<blocks(count), threads>>>(
       source.data, keys.data, count, options.pair_threshold, ranges.data);
   check(cudaGetLastError());
+  end_kernel();
+  begin_kernel();
   count_pairs<<<static_cast<unsigned>(count), threads>>>(
       source.data, sorted.data, count, ranges.data, options.pair_threshold,
       .03 * context.box_size, counts.data);
   check(cudaGetLastError());
+  end_kernel();
   bytes = 0;
   check(cub::DeviceScan::ExclusiveSum(nullptr, bytes, counts.data, offsets.data,
                                       count + 1));
@@ -302,10 +308,12 @@ Pairs cuda_pairing(MeshView mesh, FeaturesView features,
   if (!total)
     return result;
   Buffer<Index> accepted(total), ordered(total), output(2 * total);
+  begin_kernel();
   fill_pairs<<<static_cast<unsigned>(count), threads>>>(
       source.data, sorted.data, count, ranges.data, offsets.data,
       options.pair_threshold, .03 * context.box_size, accepted.data);
   check(cudaGetLastError());
+  end_kernel();
   // Sorting each source's accepted target ordinals restores the CPU nested-loop
   // order even if kmin keys tie or selected IDs are not sorted.
   bytes = 0;
@@ -318,9 +326,11 @@ Pairs cuda_pairing(MeshView mesh, FeaturesView features,
         temporary.data, bytes, accepted.data, ordered.data, total, count,
         offsets.data, offsets.data + 1));
   }
+  begin_kernel();
   materialize_pairs<<<static_cast<unsigned>(count), threads>>>(
       ids.data, ordered.data, offsets.data, total, output.data);
   check(cudaGetLastError());
+  end_kernel();
   result.a.resize(total);
   result.b.resize(total);
   output.download(result.a.data(), total);
@@ -329,10 +339,10 @@ Pairs cuda_pairing(MeshView mesh, FeaturesView features,
 }
 
 class CudaBackend final : public Backend {
-  std::unique_ptr<Backend> cpu = make_cpu_backend();
+  bool profile = false;
 
 public:
-  CudaBackend() {
+  explicit CudaBackend(bool enabled) : profile(enabled) {
     int count = 0;
     check(cudaGetDeviceCount(&count));
     if (!count)
@@ -342,22 +352,27 @@ public:
   const char *name() const noexcept override { return "cuda"; }
   Features curvature(MeshView m, TopologyView t,
                      const Options &o) const override {
+    ProfileStage metrics("curvature", profile);
     return cuda_detail::curvature(m, t, o);
   }
   Pairs pairing(MeshView m, FeaturesView f, ArrayView<const Index> p,
                 ModelContext c, const Options &o) const override {
+    ProfileStage metrics("pairing", profile);
     return cuda_pairing(m, f, p, c, o);
   }
   ClusterOutput clustering(VotesView v, ModelContext c, const Options &o,
                            std::mt19937_64 &rng) const override {
+    ProfileStage metrics("mean_shift", profile);
     return cuda_detail::clustering(v, c, o, rng);
   }
   Verification verification(MeshView m, TopologyView t, ClustersView c,
                             ModelContext ctx, const Options &o) const override {
+    ProfileStage metrics("verification", profile);
     return cuda_detail::verification(m, t, c, ctx, o);
   }
   Selection select(MeshView m, FeaturesView f, ArrayView<const Scalar> w,
                    const Options &o, std::mt19937_64 &rng) const override {
+    ProfileStage metrics("sample_prune", profile);
     require_size(w.size(), m.vertices.size());
     require_size(f.size(), w.size());
     Selection result;
@@ -372,9 +387,11 @@ public:
     valid.upload(f.valid.data, n);
     Buffer<Index> sample(count), selected(count);
     sample.upload(result.sample.data(), count);
+    begin_kernel();
     prune<<<blocks(count), threads>>>(sample.data, count, k.data, valid.data, n,
                                       1 - o.prune, flags.data);
     check(cudaGetLastError());
+    end_kernel();
     Buffer<Offset> selected_count(1);
     std::size_t bytes = 0;
     check(cub::DeviceSelect::Flagged(nullptr, bytes, sample.data, flags.data,
@@ -392,6 +409,7 @@ public:
   }
   Votes transformations(MeshView m, FeaturesView f, PairsView p, ModelContext c,
                         const Options &o) const override {
+    ProfileStage metrics("transformation", profile);
     Votes result;
     Offset count = p.size(), n = m.vertices.size();
     if (!count)
@@ -417,9 +435,11 @@ public:
     pairs.upload(p.a.data, count);
     pairs.upload(p.b.data, count, count);
     Buffer<Offset> counts(count + 1), offsets(count + 1);
+    begin_kernel();
     count_votes<<<blocks(count), threads>>>(source.data, n, pairs.data, count,
                                             counts.data);
     check(cudaGetLastError());
+    end_kernel();
     std::size_t bytes = 0;
     check(cub::DeviceScan::ExclusiveSum(nullptr, bytes, counts.data,
                                         offsets.data, count + 1));
@@ -435,11 +455,13 @@ public:
     Buffer<double> output(28 * total);
     Buffer<Index> ids(total);
     Buffer<std::uint8_t> kinds(total);
+    begin_kernel();
     fill_votes<<<blocks(count), threads>>>(source.data, n, pairs.data, count,
                                            offsets.data, total, c.box_size,
                                            {c.center.x, c.center.y, c.center.z},
                                            output.data, ids.data, kinds.data);
     check(cudaGetLastError());
+    end_kernel();
     result.pairs.resize(total);
     ids.download(result.pairs.data(), total);
     std::vector<std::uint8_t> host_kind(total);
@@ -467,7 +489,7 @@ public:
   }
 };
 } // namespace
-std::unique_ptr<Backend> make_cuda_backend() {
-  return std::make_unique<CudaBackend>();
+std::unique_ptr<Backend> make_cuda_backend(bool profile) {
+  return std::make_unique<CudaBackend>(profile);
 }
 } // namespace symmetry

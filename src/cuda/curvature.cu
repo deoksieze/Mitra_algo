@@ -166,39 +166,55 @@ Features curvature(MeshView mesh, TopologyView topology,
   edge_offsets.upload(csr.offsets.data(), csr.offsets.size());
   incident_edges.upload(csr.indices.data(), csr.indices.size());
   if (f) {
+    begin_kernel();
     face_normals<<<blocks(f), threads>>>(vertices.data, n, faces.data, f,
                                          fn.data);
     check(cudaGetLastError());
+    end_kernel();
   }
+  begin_kernel();
   vertex_normals<<<blocks(n), threads>>>(fn.data, f, face_offsets.data,
                                          incident_faces.data, n, vn.data);
   check(cudaGetLastError());
+  end_kernel();
   if (e) {
+    begin_kernel();
     edge_lengths<<<blocks(e), threads>>>(vertices.data, n, edges.data, e,
                                          lengths.data);
     check(cudaGetLastError());
+    end_kernel();
   }
+  begin_kernel();
   average_length<<<1, 1>>>(lengths.data, e, mean.data);
   check(cudaGetLastError());
+  end_kernel();
   if (e) {
+    begin_kernel();
     edge_tensors<<<blocks(e), threads>>>(vertices.data, n, fn.data, f,
                                          edges.data, e, mean.data, et.data);
     check(cudaGetLastError());
+    end_kernel();
   }
+  begin_kernel();
   gather_tensors<<<blocks(n), threads>>>(et.data, e, edge_offsets.data,
                                          incident_edges.data, n, a.data);
   check(cudaGetLastError());
+  end_kernel();
   double *previous = a.data, *next = b.data;
   for (int iteration = 0; iteration < options.smoothing; ++iteration) {
+    begin_kernel();
     smooth<<<blocks(n), threads>>>(previous, next, n, neighbor_offsets.data,
                                    neighbors.data);
     check(cudaGetLastError());
+    end_kernel();
     std::swap(previous, next);
   }
   Buffer<std::uint8_t> valid(n);
+  begin_kernel();
   local_frames<<<blocks(n), threads>>>(
       previous, vn.data, n, neighbor_offsets.data, output.data, valid.data);
   check(cudaGetLastError());
+  end_kernel();
   auto lane = [&](std::vector<double> &v, int k) {
     output.download(v.data(), n, k * n);
   };

@@ -1,0 +1,549 @@
+{
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "repeat": 3,
+  "warmup": 1,
+  "parameters": {
+    "sample_ratio": 1,
+    "pair_threshold": 0.08,
+    "verify_threshold": 0.01,
+    "seed": 42
+  },
+  "records": [
+    {
+      "model": "reflection",
+      "backend": "cpu",
+      "counts": {
+        "vertices": 132,
+        "faces": 256,
+        "pairs": 1898,
+        "votes": 4452,
+        "clusters": 20
+      },
+      "sample": 132,
+      "pruned": 132,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 323.756300000241,
+      "stage_median_ms": {
+        "prepare": 0.2785,
+        "curvature": 0.1145,
+        "sample_prune": 0.0212,
+        "pairing": 0.1112,
+        "transformation": 1.6958,
+        "mean_shift": 272.9266,
+        "verification": 3.8892
+      },
+      "runs": [
+        {
+          "wall_ms": 359.12009999992733,
+          "timings_ms": {
+            "prepare": 0.2785,
+            "curvature": 0.0934,
+            "sample_prune": 0.0186,
+            "pairing": 0.1201,
+            "transformation": 2.4579,
+            "mean_shift": 301.8342,
+            "verification": 3.8892
+          }
+        },
+        {
+          "wall_ms": 316.90569999955187,
+          "timings_ms": {
+            "prepare": 0.283,
+            "curvature": 0.1376,
+            "sample_prune": 0.0317,
+            "pairing": 0.1065,
+            "transformation": 1.6704,
+            "mean_shift": 268.8391,
+            "verification": 4.0957
+          }
+        },
+        {
+          "wall_ms": 323.756300000241,
+          "timings_ms": {
+            "prepare": 0.2259,
+            "curvature": 0.1145,
+            "sample_prune": 0.0212,
+            "pairing": 0.1112,
+            "transformation": 1.6958,
+            "mean_shift": 272.9266,
+            "verification": 3.295
+          }
+        }
+      ]
+    },
+    {
+      "model": "reflection",
+      "backend": "cuda",
+      "counts": {
+        "vertices": 132,
+        "faces": 256,
+        "pairs": 1898,
+        "votes": 4452,
+        "clusters": 20
+      },
+      "sample": 132,
+      "pruned": 132,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 13956.022897000366,
+      "stage_median_ms": {
+        "prepare": 0.37,
+        "curvature": 14.1521,
+        "sample_prune": 7.2151,
+        "pairing": 9.5271,
+        "transformation": 6.5173,
+        "mean_shift": 13114.9492,
+        "verification": 200.834
+      },
+      "runs": [
+        {
+          "wall_ms": 14953.73087400003,
+          "timings_ms": {
+            "prepare": 0.37,
+            "curvature": 20.1668,
+            "sample_prune": 8.3522,
+            "pairing": 4.6706,
+            "transformation": 6.5173,
+            "mean_shift": 14231.730157,
+            "verification": 120.712584
+          }
+        },
+        {
+          "wall_ms": 13956.022897000366,
+          "timings_ms": {
+            "prepare": 0.2466,
+            "curvature": 14.1521,
+            "sample_prune": 3.2026,
+            "pairing": 9.542,
+            "transformation": 5.0341,
+            "mean_shift": 13114.9492,
+            "verification": 200.834
+          }
+        },
+        {
+          "wall_ms": 9518.138200000067,
+          "timings_ms": {
+            "prepare": 0.5038,
+            "curvature": 9.9369,
+            "sample_prune": 7.2151,
+            "pairing": 9.5271,
+            "transformation": 14.6904,
+            "mean_shift": 8734.2005,
+            "verification": 204.0601
+          }
+        }
+      ]
+    },
+    {
+      "model": "rigid",
+      "backend": "cpu",
+      "counts": {
+        "vertices": 132,
+        "faces": 256,
+        "pairs": 1898,
+        "votes": 4328,
+        "clusters": 20
+      },
+      "sample": 132,
+      "pruned": 132,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 223.21280000051047,
+      "stage_median_ms": {
+        "prepare": 0.2185,
+        "curvature": 0.0969,
+        "sample_prune": 0.0173,
+        "pairing": 0.0984,
+        "transformation": 1.6142,
+        "mean_shift": 181.9999,
+        "verification": 3.7635
+      },
+      "runs": [
+        {
+          "wall_ms": 224.5309999998426,
+          "timings_ms": {
+            "prepare": 0.2185,
+            "curvature": 0.0969,
+            "sample_prune": 0.0175,
+            "pairing": 0.0984,
+            "transformation": 1.4908,
+            "mean_shift": 186.1827,
+            "verification": 3.8111
+          }
+        },
+        {
+          "wall_ms": 221.68259999943984,
+          "timings_ms": {
+            "prepare": 0.2019,
+            "curvature": 0.098,
+            "sample_prune": 0.0173,
+            "pairing": 0.1013,
+            "transformation": 1.8122,
+            "mean_shift": 181.9999,
+            "verification": 3.5404
+          }
+        },
+        {
+          "wall_ms": 223.21280000051047,
+          "timings_ms": {
+            "prepare": 0.2272,
+            "curvature": 0.086,
+            "sample_prune": 0.0152,
+            "pairing": 0.0844,
+            "transformation": 1.6142,
+            "mean_shift": 181.8114,
+            "verification": 3.7635
+          }
+        }
+      ]
+    },
+    {
+      "model": "rigid",
+      "backend": "cuda",
+      "counts": {
+        "vertices": 132,
+        "faces": 256,
+        "pairs": 1898,
+        "votes": 4328,
+        "clusters": 20
+      },
+      "sample": 132,
+      "pruned": 132,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 6678.06870000004,
+      "stage_median_ms": {
+        "prepare": 0.2296,
+        "curvature": 7.2478,
+        "sample_prune": 3.365,
+        "pairing": 3.5989,
+        "transformation": 5.7033,
+        "mean_shift": 6202.4681,
+        "verification": 70.4205
+      },
+      "runs": [
+        {
+          "wall_ms": 7956.624499999634,
+          "timings_ms": {
+            "prepare": 0.2412,
+            "curvature": 6.6897,
+            "sample_prune": 2.7059,
+            "pairing": 3.5989,
+            "transformation": 5.3428,
+            "mean_shift": 7476.5355,
+            "verification": 70.4205
+          }
+        },
+        {
+          "wall_ms": 6489.395399999921,
+          "timings_ms": {
+            "prepare": 0.1751,
+            "curvature": 7.2478,
+            "sample_prune": 3.365,
+            "pairing": 4.0908,
+            "transformation": 8.0042,
+            "mean_shift": 6053.1753,
+            "verification": 70.357
+          }
+        },
+        {
+          "wall_ms": 6678.06870000004,
+          "timings_ms": {
+            "prepare": 0.2296,
+            "curvature": 8.4933,
+            "sample_prune": 3.4699,
+            "pairing": 3.1478,
+            "transformation": 5.7033,
+            "mean_shift": 6202.4681,
+            "verification": 78.6312
+          }
+        }
+      ]
+    },
+    {
+      "model": "partial",
+      "backend": "cpu",
+      "counts": {
+        "vertices": 198,
+        "faces": 384,
+        "pairs": 2378,
+        "votes": 5630,
+        "clusters": 20
+      },
+      "sample": 198,
+      "pruned": 198,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 360.8240999992631,
+      "stage_median_ms": {
+        "prepare": 0.2557,
+        "curvature": 0.0908,
+        "sample_prune": 0.0183,
+        "pairing": 0.1375,
+        "transformation": 1.4777,
+        "mean_shift": 315.1761,
+        "verification": 5.2271
+      },
+      "runs": [
+        {
+          "wall_ms": 374.5208999998795,
+          "timings_ms": {
+            "prepare": 0.277,
+            "curvature": 0.0908,
+            "sample_prune": 0.0183,
+            "pairing": 0.1372,
+            "transformation": 1.4777,
+            "mean_shift": 329.4634,
+            "verification": 5.2271
+          }
+        },
+        {
+          "wall_ms": 360.8240999992631,
+          "timings_ms": {
+            "prepare": 0.2404,
+            "curvature": 0.0869,
+            "sample_prune": 0.0164,
+            "pairing": 0.1375,
+            "transformation": 1.3327,
+            "mean_shift": 315.1761,
+            "verification": 5.2971
+          }
+        },
+        {
+          "wall_ms": 354.9403999995775,
+          "timings_ms": {
+            "prepare": 0.2557,
+            "curvature": 0.0911,
+            "sample_prune": 0.0185,
+            "pairing": 0.1426,
+            "transformation": 1.6477,
+            "mean_shift": 311.3202,
+            "verification": 4.6604
+          }
+        }
+      ]
+    },
+    {
+      "model": "partial",
+      "backend": "cuda",
+      "counts": {
+        "vertices": 198,
+        "faces": 384,
+        "pairs": 2378,
+        "votes": 5630,
+        "clusters": 20
+      },
+      "sample": 198,
+      "pruned": 198,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 8564.417600000525,
+      "stage_median_ms": {
+        "prepare": 0.2422,
+        "curvature": 5.2617,
+        "sample_prune": 1.9776,
+        "pairing": 3.4604,
+        "transformation": 3.4354,
+        "mean_shift": 8199.8544,
+        "verification": 66.9102
+      },
+      "runs": [
+        {
+          "wall_ms": 8560.361499999999,
+          "timings_ms": {
+            "prepare": 0.5521,
+            "curvature": 4.754,
+            "sample_prune": 8.5646,
+            "pairing": 2.738,
+            "transformation": 3.4354,
+            "mean_shift": 8192.7529,
+            "verification": 69.6874
+          }
+        },
+        {
+          "wall_ms": 8564.417600000525,
+          "timings_ms": {
+            "prepare": 0.2422,
+            "curvature": 8.1506,
+            "sample_prune": 1.9776,
+            "pairing": 4.0095,
+            "transformation": 4.4214,
+            "mean_shift": 8199.8544,
+            "verification": 66.9102
+          }
+        },
+        {
+          "wall_ms": 8707.160699999804,
+          "timings_ms": {
+            "prepare": 0.2192,
+            "curvature": 5.2617,
+            "sample_prune": 1.8712,
+            "pairing": 3.4604,
+            "transformation": 2.7771,
+            "mean_shift": 8343.8119,
+            "verification": 66.9026
+          }
+        }
+      ]
+    },
+    {
+      "model": "single",
+      "backend": "cpu",
+      "counts": {
+        "vertices": 66,
+        "faces": 128,
+        "pairs": 458,
+        "votes": 1122,
+        "clusters": 20
+      },
+      "sample": 66,
+      "pruned": 66,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 22.29220000026544,
+      "stage_median_ms": {
+        "prepare": 0.0947,
+        "curvature": 0.0444,
+        "sample_prune": 0.0078,
+        "pairing": 0.0256,
+        "transformation": 0.3263,
+        "mean_shift": 9.4813,
+        "verification": 1.1373
+      },
+      "runs": [
+        {
+          "wall_ms": 22.29220000026544,
+          "timings_ms": {
+            "prepare": 0.0966,
+            "curvature": 0.0446,
+            "sample_prune": 0.0078,
+            "pairing": 0.0268,
+            "transformation": 0.2958,
+            "mean_shift": 9.2488,
+            "verification": 1.1373
+          }
+        },
+        {
+          "wall_ms": 23.196100000859587,
+          "timings_ms": {
+            "prepare": 0.085,
+            "curvature": 0.0444,
+            "sample_prune": 0.008,
+            "pairing": 0.0236,
+            "transformation": 0.3305,
+            "mean_shift": 10.2643,
+            "verification": 1.2283
+          }
+        },
+        {
+          "wall_ms": 20.9856999999829,
+          "timings_ms": {
+            "prepare": 0.0947,
+            "curvature": 0.0412,
+            "sample_prune": 0.0073,
+            "pairing": 0.0256,
+            "transformation": 0.3263,
+            "mean_shift": 9.4813,
+            "verification": 0.9929
+          }
+        }
+      ]
+    },
+    {
+      "model": "single",
+      "backend": "cuda",
+      "counts": {
+        "vertices": 66,
+        "faces": 128,
+        "pairs": 458,
+        "votes": 1122,
+        "clusters": 20
+      },
+      "sample": 66,
+      "pruned": 66,
+      "diagnostics": {
+        "rejected_faces": 0,
+        "nonmanifold_edges": 0,
+        "orientation_conflicts": 0,
+        "limited_iterations": 0
+      },
+      "wall_median_ms": 930.1020000002609,
+      "stage_median_ms": {
+        "prepare": 0.0782,
+        "curvature": 6.1616,
+        "sample_prune": 2.2347,
+        "pairing": 2.7076,
+        "transformation": 2.8,
+        "mean_shift": 611.7786,
+        "verification": 44.1821
+      },
+      "runs": [
+        {
+          "wall_ms": 930.7390000003579,
+          "timings_ms": {
+            "prepare": 0.0891,
+            "curvature": 5.1824,
+            "sample_prune": 4.3901,
+            "pairing": 2.064,
+            "transformation": 2.3568,
+            "mean_shift": 603.2772,
+            "verification": 44.1873
+          }
+        },
+        {
+          "wall_ms": 930.1020000002609,
+          "timings_ms": {
+            "prepare": 0.0782,
+            "curvature": 6.3024,
+            "sample_prune": 1.8357,
+            "pairing": 2.7076,
+            "transformation": 2.8,
+            "mean_shift": 620.2233,
+            "verification": 44.1821
+          }
+        },
+        {
+          "wall_ms": 896.3537999998152,
+          "timings_ms": {
+            "prepare": 0.0746,
+            "curvature": 6.1616,
+            "sample_prune": 2.2347,
+            "pairing": 3.3886,
+            "transformation": 3.592,
+            "mean_shift": 611.7786,
+            "verification": 41.6699
+          }
+        }
+      ]
+    }
+  ]
+}

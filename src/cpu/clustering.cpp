@@ -29,9 +29,10 @@ double descriptor_distance(const Descriptor &a, const Descriptor &b) {
   }
   return s;
 }
-ClusterOutput clustering_with(VotesView votes, ModelContext context,
-                              const Options &options, std::mt19937_64 &random,
-                              const NeighborhoodEvaluator &evaluate) {
+ClusterOutput clustering_trajectories(VotesView votes, ModelContext context,
+                                      const Options &options,
+                                      std::mt19937_64 &random,
+                                      const TrajectoryEvaluator &evaluate) {
   std::vector<UnpackedCluster> clusters;
   int limited_iterations = 0;
   double h = options.bandwidth, h2 = h * h;
@@ -50,29 +51,14 @@ ClusterOutput clustering_with(VotesView votes, ModelContext context,
     int seed = seeds[random() % seeds.size()];
     bool reflection = votes.is_reflection(seed);
     auto mean = votes.descriptor_at(seed);
-    std::map<int, std::uint64_t> support;
-    bool converged = false;
-    for (int iteration = 0; iteration < options.max_iterations; ++iteration) {
-      auto neighborhood = evaluate(mean, reflection, h2);
-      Descriptor next = neighborhood.weighted_sum;
-      double weight = neighborhood.weight;
-      for (Index j : neighborhood.members) {
-        ++support[j];
-        visited[j] = true;
-      }
-      if (weight <= eps) {
-        visited[seed] = true;
-        break;
-      }
-      for (double &x : next)
-        x /= weight;
-      double movement = descriptor_distance(mean, next);
-      mean = next;
-      if (movement < 1e-6 * h2) {
-        converged = true;
-        break;
-      }
-    }
+    auto trajectory = evaluate(mean, reflection, h2, options.max_iterations);
+    mean = trajectory.mean;
+    auto support = std::move(trajectory.support);
+    for (const auto &entry : support)
+      visited[entry.first] = true;
+    if (trajectory.seed_exhausted)
+      visited[seed] = true;
+    bool converged = trajectory.converged;
     if (!converged)
       ++limited_iterations;
     int merge = -1;
@@ -167,6 +153,36 @@ ClusterOutput clustering_with(VotesView votes, ModelContext context,
   return result;
 }
 
+ClusterOutput clustering_with(VotesView votes, ModelContext context,
+                              const Options &options, std::mt19937_64 &random,
+                              const NeighborhoodEvaluator &evaluate) {
+  return clustering_trajectories(
+      votes, context, options, random,
+      [&](const Descriptor &seed, bool reflection, double h2,
+          int max_iterations) {
+        Trajectory result;
+        result.mean = seed;
+        for (int iteration = 0; iteration < max_iterations; ++iteration) {
+          auto neighborhood = evaluate(result.mean, reflection, h2);
+          for (Index j : neighborhood.members)
+            ++result.support[j];
+          if (neighborhood.weight <= eps) {
+            result.seed_exhausted = true;
+            break;
+          }
+          for (double &value : neighborhood.weighted_sum)
+            value /= neighborhood.weight;
+          double movement =
+              descriptor_distance(result.mean, neighborhood.weighted_sum);
+          result.mean = neighborhood.weighted_sum;
+          if (movement < 1e-6 * h2) {
+            result.converged = true;
+            break;
+          }
+        }
+        return result;
+      });
+}
 ClusterOutput clustering(VotesView votes, ModelContext context,
                          const Options &options, std::mt19937_64 &random) {
   return clustering_with(

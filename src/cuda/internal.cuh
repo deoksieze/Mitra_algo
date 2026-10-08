@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
+#include "profile.h"
 #include "symmetry/pipeline.h"
 #include <cuda_runtime.h>
 #include <limits>
@@ -14,27 +15,33 @@ inline void check(cudaError_t status) {
 template <class T> class Buffer {
 public:
   T *data = nullptr;
+  std::size_t bytes = 0;
   explicit Buffer(std::size_t n) {
     if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
       throw std::overflow_error("CUDA allocation size overflow");
-    if (n)
+    if (n) {
       check(cudaMalloc(reinterpret_cast<void **>(&data), n * sizeof(T)));
+      bytes = n * sizeof(T);
+      allocated(bytes);
+    }
   }
   ~Buffer() {
-    if (data)
+    if (data) {
       cudaFree(data);
+      released(bytes);
+    }
   }
   Buffer(const Buffer &) = delete;
   Buffer &operator=(const Buffer &) = delete;
   void upload(const T *source, std::size_t n, std::size_t offset = 0) {
     if (n)
-      check(cudaMemcpy(data + offset, source, n * sizeof(T),
-                       cudaMemcpyHostToDevice));
+      check(profile_copy(data + offset, source, n * sizeof(T),
+                         cudaMemcpyHostToDevice));
   }
   void download(T *target, std::size_t n, std::size_t offset = 0) const {
     if (n)
-      check(cudaMemcpy(target, data + offset, n * sizeof(T),
-                       cudaMemcpyDeviceToHost));
+      check(profile_copy(target, data + offset, n * sizeof(T),
+                         cudaMemcpyDeviceToHost));
   }
 };
 constexpr unsigned threads = 256;

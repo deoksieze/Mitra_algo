@@ -176,17 +176,21 @@ Verification verification(MeshView mesh, TopologyView topology,
     for (Index i : side)
       permit[i] = 1;
     allowed.upload(permit.data(), count);
+    begin_kernel();
     initialize_labels<<<blocks(count), threads>>>(allowed.data, labels_a.data,
                                                   count);
     check(cudaGetLastError());
+    end_kernel();
     Index *previous = labels_a.data, *next = labels_b.data;
     for (Offset iteration = 0;; ++iteration) {
       if (iteration >= count)
         throw std::runtime_error("CUDA component propagation did not converge");
       check(cudaMemset(changed.data, 0, sizeof(int)));
+      begin_kernel();
       propagate_labels<<<blocks(count), threads>>>(
           offsets.data, neighbors.data, previous, next, count, changed.data);
       check(cudaGetLastError());
+      end_kernel();
       int flag = 0;
       changed.download(&flag, 1);
       std::swap(previous, next);
@@ -194,8 +198,8 @@ Verification verification(MeshView mesh, TopologyView topology,
         break;
     }
     std::vector<Index> host(count);
-    check(cudaMemcpy(host.data(), previous, count * sizeof(Index),
-                     cudaMemcpyDeviceToHost));
+    check(profile_copy(host.data(), previous, count * sizeof(Index),
+                       cudaMemcpyDeviceToHost));
     std::map<Index, std::vector<Index>> components;
     for (Index i : side)
       components[host[i]].push_back(i);
@@ -215,10 +219,12 @@ Verification verification(MeshView mesh, TopologyView topology,
     motion.normal = {c.plane_normal.x, c.plane_normal.y, c.plane_normal.z};
     motion.offset = c.plane_offset;
     motion.reflection = c.reflection;
+    begin_kernel();
     verify_vertices<<<blocks(2 * count), threads>>>(
         source.data, count, faces.data, fcount, tree.data, ids.data, motion,
         options.verify_threshold * context.box_size, flags.data, errors.data);
     check(cudaGetLastError());
+    end_kernel();
     flags.download(mask.data(), 2 * count);
     errors.download(distances.data(), count);
     std::vector<Index> a, b;
@@ -265,9 +271,11 @@ triangle_distances(const std::vector<TriangleQuery> &queries) {
   Buffer<TriangleQuery> input(queries.size());
   input.upload(queries.data(), queries.size());
   Buffer<double> output(queries.size());
+  begin_kernel();
   test_triangles<<<blocks(queries.size()), threads>>>(
       input.data, queries.size(), output.data);
   check(cudaGetLastError());
+  end_kernel();
   output.download(result.data(), result.size());
   return result;
 }

@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-08",
+  "gpu": "NVIDIA GeForce RTX 4070 Laptop GPU",
+  "vram_mib": 8188,
+  "driver": "610.91",
+  "cuda_toolkit": "13.3.73",
+  "architecture": 89,
+  "compiler": "GCC 13.3 / NVCC 13.3",
+  "cmake": "3.28.3",
+  "configuration": "Release, double, --fmad=false",
+  "execution": "WSL/WDDM; benchmarks run sequentially after tests; CLI profiling disabled",
+  "limitations": {
+    "real_mesh": "Stanford download failed: DNS Temporary failure in name resolution",
+    "compute_sanitizer": "WDDM debugger interface unavailable / device unsupported",
+    "nsight_compute": "ERR_NVGPUCTRPERM",
+    "nsight_systems": "CUDA API trace only; no GPU kernel or memory records"
+  }
+}
