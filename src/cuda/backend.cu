@@ -354,7 +354,7 @@ public:
   }
   Verification verification(MeshView m, TopologyView t, ClustersView c,
                             ModelContext ctx, const Options &o) const override {
-    return cpu->verification(m, t, c, ctx, o);
+    return cuda_detail::verification(m, t, c, ctx, o);
   }
   Selection select(MeshView m, FeaturesView f, ArrayView<const Scalar> w,
                    const Options &o, std::mt19937_64 &rng) const override {

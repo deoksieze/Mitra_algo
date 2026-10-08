@@ -66,11 +66,25 @@ __device__ inline V read(const double *s, Offset n, Index i, int lane) {
 __device__ inline M frame(V a, V b, V c) {
   return {{a.x, b.x, c.x, a.y, b.y, c.y, a.z, b.z, c.z}};
 }
+__device__ inline V crossv(V a, V b) {
+  return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+__device__ inline double length(V a) { return sqrt(dotv(a, a)); }
+__device__ inline V unitv(V a) {
+  double n = length(a);
+  return n > 1e-14 ? scale(a, 1 / n) : V{};
+}
+__device__ inline V operator+(V a, V b) { return add(a, b); }
+__device__ inline V operator-(V a, V b) { return sub(a, b); }
+__device__ inline V operator*(V a, double s) { return scale(a, s); }
+__device__ inline V operator/(V a, double s) { return scale(a, 1 / s); }
 inline void upload_points(Buffer<double> &device, PointsView p, Offset offset) {
   device.upload(p.x.data, p.size(), offset);
   device.upload(p.y.data, p.size(), offset + p.size());
   device.upload(p.z.data, p.size(), offset + 2 * p.size());
 }
+Verification verification(MeshView, TopologyView, ClustersView, ModelContext,
+                          const Options &);
 ClusterOutput clustering(VotesView, ModelContext, const Options &,
                          std::mt19937_64 &);
 } // namespace symmetry::cuda_detail
